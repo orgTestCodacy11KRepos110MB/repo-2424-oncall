@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Added
+
+- Enable web overrides for Terraform-based schedules
+
 ### Changed
 
 - Improve logging for creating contact point for Grafana Alerting integration

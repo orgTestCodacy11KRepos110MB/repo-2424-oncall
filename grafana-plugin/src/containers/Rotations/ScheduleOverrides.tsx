@@ -72,8 +72,7 @@ class ScheduleOverrides extends Component<ScheduleOverridesProps, ScheduleOverri
 
     const schedule = store.scheduleStore.items[scheduleId];
 
-    const isTypeReadOnly =
-      schedule && (schedule?.type === ScheduleType.Ical || schedule?.type === ScheduleType.Calendar);
+    const isTypeReadOnly = schedule && schedule?.type === ScheduleType.Ical;
 
     return (
       <>
@@ -86,7 +85,7 @@ class ScheduleOverrides extends Component<ScheduleOverridesProps, ScheduleOverri
                 </Text.Title>
               </div>
               {isTypeReadOnly ? (
-                <Tooltip content="Ical and API/Terraform schedules are read-only" placement="top">
+                <Tooltip content="Ical overrides are read-only" placement="top">
                   <div>
                     <Button variant="primary" icon="plus" disabled>
                       Add override
@@ -117,7 +116,7 @@ class ScheduleOverrides extends Component<ScheduleOverridesProps, ScheduleOverri
                       startMoment={startMoment}
                       currentTimezone={currentTimezone}
                       onClick={(moment) => {
-                        this.onRotationClick(shiftId, moment);
+                        this.onRotationClick(shiftId, events[0].source, moment);
                       }}
                       transparent={isPreview}
                     />
@@ -131,7 +130,7 @@ class ScheduleOverrides extends Component<ScheduleOverridesProps, ScheduleOverri
                     startMoment={startMoment}
                     currentTimezone={currentTimezone}
                     onClick={(moment) => {
-                      this.onRotationClick('new', moment);
+                      this.onRotationClick('new', null, moment);
                     }}
                   />
                 </CSSTransition>
@@ -173,10 +172,14 @@ class ScheduleOverrides extends Component<ScheduleOverridesProps, ScheduleOverri
     );
   }
 
-  onRotationClick = (shiftId: Shift['id'], moment: dayjs.Dayjs) => {
+  onRotationClick = (shiftId: Shift['id'], source: string, moment: dayjs.Dayjs) => {
     const { disabled } = this.props;
 
     if (disabled) {
+      return;
+    }
+
+    if (source !== 'web') {
       return;
     }
 

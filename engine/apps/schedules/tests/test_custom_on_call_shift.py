@@ -1,4 +1,5 @@
 from calendar import monthrange
+from unittest.mock import patch
 
 import pytest
 from django.utils import timezone
@@ -1481,3 +1482,25 @@ def test_rolling_users_event_daily_by_day_start_none_convert_to_ical(
     ical_data = on_call_shift.convert_to_ical()
     # empty result since there is no event in the defined time range
     assert ical_data == ""
+
+
+@pytest.mark.django_db
+def test_delete_passes_source_to_schedule_drop_ical(make_organization_and_user, make_on_call_shift, make_schedule):
+    organization, _ = make_organization_and_user()
+    schedule = make_schedule(organization, schedule_class=OnCallScheduleWeb)
+
+    now = timezone.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    on_call_shift = make_on_call_shift(
+        organization=organization,
+        shift_type=CustomOnCallShift.TYPE_SINGLE_EVENT,
+        priority_level=1,
+        start=now,
+        rotation_start=now,
+        duration=timezone.timedelta(minutes=30),
+        source=CustomOnCallShift.SOURCE_WEB,
+        schedule=schedule,
+    )
+
+    with patch("apps.schedules.models.custom_on_call_shift.drop_cached_ical_task") as mock_drop_task:
+        on_call_shift.delete()
+    mock_drop_task.apply_async.called_with((schedule.pk, CustomOnCallShift.SOURCE_WEB))

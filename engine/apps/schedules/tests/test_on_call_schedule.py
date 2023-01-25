@@ -1,4 +1,5 @@
 import datetime
+from unittest.mock import patch
 
 import pytest
 import pytz
@@ -965,3 +966,152 @@ def test_filter_events_none_cache_unchanged(
     events = schedule.filter_events("UTC", start_date, days=5, filter_by=OnCallSchedule.TYPE_ICAL_PRIMARY)
     expected = []
     assert events == expected
+
+
+@pytest.mark.django_db
+def test_api_schedule_use_overrides_from_url(make_organization, make_schedule, get_ical):
+    ical_file = get_ical("calendar_with_recurring_event.ics")
+    ical_data = ical_file.to_ical().decode("utf-8")
+    organization = make_organization()
+    schedule = make_schedule(
+        organization,
+        schedule_class=OnCallScheduleCalendar,
+        ical_url_overrides="http://some-url",
+    )
+
+    with patch("apps.schedules.models.on_call_schedule.fetch_ical_file_or_get_error") as mock_fetch_ical:
+        mock_fetch_ical.return_value = (ical_data, None)
+        schedule.refresh_ical_file()
+
+    schedule.refresh_from_db()
+    assert schedule.cached_ical_file_overrides == ical_data
+
+
+@pytest.mark.django_db
+def test_api_schedule_use_overrides_from_db(make_organization, make_schedule, make_on_call_shift):
+    organization = make_organization()
+    schedule = make_schedule(
+        organization,
+        schedule_class=OnCallScheduleCalendar,
+        ical_url_overrides=None,
+    )
+    now = timezone.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    override = make_on_call_shift(
+        organization=organization,
+        shift_type=CustomOnCallShift.TYPE_OVERRIDE,
+        priority_level=1,
+        start=now,
+        rotation_start=now,
+        duration=timezone.timedelta(minutes=30),
+        source=CustomOnCallShift.SOURCE_WEB,
+        schedule=schedule,
+    )
+
+    schedule.refresh_ical_file()
+
+    ical_event = override.convert_to_ical()
+    assert ical_event in schedule.cached_ical_file_overrides
+
+
+@pytest.mark.django_db
+def test_api_schedule_combines_overrides_from_url_and_db(
+    make_organization, make_user_for_organization, make_schedule, make_on_call_shift, get_ical
+):
+    ical_file = get_ical("calendar_with_recurring_event.ics")
+    ical_data = ical_file.to_ical().decode("utf-8")
+    organization = make_organization()
+    user_1 = make_user_for_organization(organization)
+    user_2 = make_user_for_organization(organization)
+    schedule = make_schedule(
+        organization,
+        schedule_class=OnCallScheduleCalendar,
+        ical_url_overrides="http://some-url",
+    )
+    now = timezone.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    override = make_on_call_shift(
+        organization=organization,
+        shift_type=CustomOnCallShift.TYPE_OVERRIDE,
+        priority_level=1,
+        start=now,
+        rotation_start=now,
+        duration=timezone.timedelta(minutes=30),
+        source=CustomOnCallShift.SOURCE_WEB,
+        schedule=schedule,
+    )
+    override.add_rolling_users([[user_1, user_2]])
+
+    with patch("apps.schedules.models.on_call_schedule.fetch_ical_file_or_get_error") as mock_fetch_ical:
+        mock_fetch_ical.return_value = (ical_data, None)
+        schedule.refresh_ical_file()
+
+    schedule.refresh_from_db()
+
+    # events coming from ical file are in the final ical file
+    for component in ical_file.walk():
+        if component.name == "VEVENT":
+            assert component.to_ical().decode("utf-8") in schedule.cached_ical_file_overrides
+    # as well as the event coming from the override shift
+    ical_event = override.convert_to_ical()
+    assert ical_event in schedule.cached_ical_file_overrides
+
+
+@pytest.mark.django_db
+def test_api_schedule_preview_requires_override(make_organization, make_schedule, make_on_call_shift):
+    organization = make_organization()
+    schedule = make_schedule(
+        organization,
+        schedule_class=OnCallScheduleCalendar,
+    )
+    now = timezone.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    non_override_shift = make_on_call_shift(
+        organization=organization,
+        shift_type=CustomOnCallShift.TYPE_ROLLING_USERS_EVENT,
+        priority_level=1,
+        start=now,
+        rotation_start=now,
+        duration=timezone.timedelta(minutes=30),
+        source=CustomOnCallShift.SOURCE_WEB,
+        schedule=schedule,
+    )
+
+    with pytest.raises(ValueError):
+        schedule.preview_shift(non_override_shift, "UTC", now, 1)
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    "shift_source",
+    [
+        CustomOnCallShift.SOURCE_WEB,
+        CustomOnCallShift.SOURCE_API,
+    ],
+)
+def test_api_schedule_drop_depending_on_source(
+    make_organization, make_schedule, make_on_call_shift, get_ical, shift_source
+):
+    organization = make_organization()
+    calendar = get_ical("calendar_with_recurring_event.ics")
+    schedule = make_schedule(
+        organization, schedule_class=OnCallScheduleCalendar, cached_ical_file_overrides=calendar.to_ical()
+    )
+    now = timezone.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    make_on_call_shift(
+        organization=organization,
+        shift_type=CustomOnCallShift.TYPE_OVERRIDE,
+        priority_level=1,
+        start=now,
+        rotation_start=now,
+        duration=timezone.timedelta(minutes=30),
+        source=CustomOnCallShift.SOURCE_WEB,
+        schedule=schedule,
+    )
+
+    schedule.drop_cached_ical(source=shift_source)
+
+    schedule.refresh_from_db()
+    if shift_source == CustomOnCallShift.SOURCE_WEB:
+        # update existing schedule refreshing web shifts
+        assert schedule.cached_ical_file_overrides is not None
+    else:
+        # reset to force a full refresh
+        assert schedule.cached_ical_file_overrides is None

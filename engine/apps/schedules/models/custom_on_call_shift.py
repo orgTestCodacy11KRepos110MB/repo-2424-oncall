@@ -228,7 +228,7 @@ class CustomOnCallShift(models.Model):
             super().delete(*args, **kwargs)
 
         for schedule in schedules_to_update:
-            self.start_drop_ical_and_check_schedule_tasks(schedule)
+            self.start_drop_ical_and_check_schedule_tasks(schedule, source=self.source)
 
     @property
     def repr_settings_for_client_side_logging(self) -> str:
@@ -651,8 +651,8 @@ class CustomOnCallShift(models.Model):
         result %= len(self.rolling_users)
         return result
 
-    def start_drop_ical_and_check_schedule_tasks(self, schedule):
-        drop_cached_ical_task.apply_async((schedule.pk,))
+    def start_drop_ical_and_check_schedule_tasks(self, schedule, source=None):
+        drop_cached_ical_task.apply_async((schedule.pk, source))
         schedule_notify_about_empty_shifts_in_schedule.apply_async((schedule.pk,))
         schedule_notify_about_gaps_in_schedule.apply_async((schedule.pk,))
 
