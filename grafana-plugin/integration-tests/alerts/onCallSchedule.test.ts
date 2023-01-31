@@ -17,16 +17,16 @@ test('we can create an oncall schedule + receive an alert', async ({ page }) => 
   const integrationName = generateRandomValue();
   const onCallScheduleName = generateRandomValue();
 
-  // await createOnCallSchedule(page, onCallScheduleName);
-  // await createEscalationChain(
-  //   page,
-  //   escalationChainName,
-  //   EscalationStep.NotifyUsersFromOnCallSchedule,
-  //   onCallScheduleName
-  // );
+  await createOnCallSchedule(page, onCallScheduleName);
+  await createEscalationChain(
+    page,
+    escalationChainName,
+    EscalationStep.NotifyUsersFromOnCallSchedule,
+    onCallScheduleName
+  );
 
   await createIntegrationAndSendDemoAlert(page, integrationName, escalationChainName);
 
   // TODO: resolve alert after each test..
-  // expect(await alertGroupIsTriggered(page)).toBe(true);
+  expect(await alertGroupIsTriggered(page)).toBe(true);
 });

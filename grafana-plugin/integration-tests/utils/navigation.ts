@@ -13,7 +13,7 @@ export const goToGrafanaPage = (page: Page, url?: GrafanaPage, waitUntil?: WaitU
   _goToPage(page, url, waitUntil);
 
 export const goToOnCallPage = (page: Page, onCallPage: OnCallPage = 'incidents'): Promise<Response> =>
-  _goToPage(page, `/a/grafana-oncall-app/?page=${onCallPage}`);
+  _goToPage(page, `/a/grafana-oncall-app/${onCallPage}`);
 
 export const goToOnCallPageByClickingOnTab = async (page: Page, onCallTab: OnCallPluginTab): Promise<void> =>
   (await page.waitForSelector(`div[class*="LegacyNavTabsBar"] >> text=${onCallTab}`)).click();

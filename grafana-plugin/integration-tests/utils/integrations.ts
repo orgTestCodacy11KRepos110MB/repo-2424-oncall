@@ -18,7 +18,6 @@ export const createIntegrationAndSendDemoAlert = async (
   (await page.waitForSelector('div[class*="CreateAlertReceiveChannelContainer"] >> text=Webhook')).click();
 
   // wait for the integrations settings modal to open up... and then close it
-  await page.waitForTimeout(2000);
   await clickButton({ page, buttonText: 'Open Escalations Settings' });
 
   // get the surrounding element for the integration settings
